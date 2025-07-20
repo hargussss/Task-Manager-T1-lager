@@ -18,7 +18,15 @@
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
         "baseUrl": ".",
-        "types": ["vite/client", "react", "react-dom"]
+        "types": ["vite/client", "react", "react-dom"],
+        "paths": {
+            "@/*": ["src/*"],
+            "@entities/*": ["src/entities/*"],
+            "@features/*": ["src/features/*"],
+            "@widgets/*": ["src/widgets/*"],
+            "@pages/*": ["src/pages/*"],
+            "@shared/*": ["src/shared/*"]
+        }
     },
     "include": ["src/**/*"],
     "references": [{ "path": "./tsconfig.node.json" }]
