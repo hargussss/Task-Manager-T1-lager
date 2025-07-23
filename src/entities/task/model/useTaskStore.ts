@@ -8,6 +8,8 @@ import {
     TaskPriority,
 } from "@/entities/task/types/Task";
 
+const API_URL = "http://localhost:3001";
+
 interface SortState {
     sortBy: "createdAt" | "priority" | "title";
     sortOrder: "asc" | "desc";
@@ -18,55 +20,37 @@ interface SortState {
     resetSort: () => void;
 }
 
-interface TaskState extends SortState {
-    tasks: Task[];
+interface FilterState {
     filters: {
         status: TaskStatus | "All";
         category: TaskCategory | "All";
         priority: TaskPriority | "All";
     };
-    setFilter: (filterType: keyof TaskState["filters"], value: string) => void;
+    setFilter: (
+        filterType: keyof FilterState["filters"],
+        value: string
+    ) => void;
     resetFilters: () => void;
-    addTask: (task: Task) => void;
-    updateTask: (task: Task) => void;
-    deleteTask: (id: string) => void;
-    getTaskById: (id: string) => Task | undefined;
 }
 
-const mockTasks: Task[] = [
-    {
-        id: "1",
-        title: "Fix login flow",
-        description: "Fix the redirect after login on mobile",
-        category: "Bug",
-        status: "In Progress",
-        priority: "High",
-        createdAt: new Date("2024-01-01").toISOString(),
-    },
-    {
-        id: "2",
-        title: "Add dark mode",
-        description: "Implement dark mode toggle in settings",
-        category: "Feature",
-        status: "To Do",
-        priority: "Medium",
-        createdAt: new Date("2024-02-01").toISOString(),
-    },
-    {
-        id: "3",
-        title: "Update documentation",
-        description: "Update the getting started guide",
-        category: "Documentation",
-        status: "Done",
-        priority: "Low",
-        createdAt: new Date("2024-03-01").toISOString(),
-    },
-];
+interface TaskState extends SortState, FilterState {
+    tasks: Task[];
+    isLoading: boolean;
+    error: string | null;
+
+    fetchTasks: () => Promise<void>;
+    createTask: (taskData: Omit<Task, "id" | "createdAt">) => Promise<void>;
+    updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
+    deleteTask: (id: string) => Promise<void>;
+    getTaskById: (id: string) => Task | undefined;
+}
 
 export const useTaskStore = create<TaskState>()(
     persist(
         (set, get) => ({
-            tasks: mockTasks,
+            tasks: [],
+            isLoading: false,
+            error: null,
             filters: {
                 status: "All",
                 category: "All",
@@ -74,12 +58,87 @@ export const useTaskStore = create<TaskState>()(
             },
             sortBy: "createdAt",
             sortOrder: "desc",
+
+            fetchTasks: async () => {
+                set({ isLoading: true, error: null });
+                try {
+                    const res = await fetch(`${API_URL}/tasks`);
+                    if (!res.ok) throw new Error("Failed to fetch tasks");
+                    const tasks: Task[] = await res.json();
+                    set({ tasks });
+                } catch (err: any) {
+                    set({ error: err.message || "Failed to load tasks" });
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            createTask: async (taskData) => {
+                set({ isLoading: true, error: null });
+                try {
+                    const res = await fetch(`${API_URL}/tasks`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(taskData),
+                    });
+                    if (!res.ok) throw new Error("Failed to create task");
+                    const newTask: Task = await res.json();
+                    set((state) => ({ tasks: [...state.tasks, newTask] }));
+                } catch (err: any) {
+                    set({ error: err.message || "Failed to create task" });
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            updateTask: async (id, updates) => {
+                set({ isLoading: true, error: null });
+                try {
+                    const res = await fetch(`${API_URL}/tasks/${id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(updates),
+                    });
+                    if (!res.ok) throw new Error("Failed to update task");
+                    const updatedTask: Task = await res.json();
+                    set((state) => ({
+                        tasks: state.tasks.map((t) =>
+                            t.id === id ? updatedTask : t
+                        ),
+                    }));
+                } catch (err: any) {
+                    set({ error: err.message || "Failed to update task" });
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            deleteTask: async (id) => {
+                set({ isLoading: true, error: null });
+                try {
+                    const res = await fetch(`${API_URL}/tasks/${id}`, {
+                        method: "DELETE",
+                    });
+                    if (!res.ok) throw new Error("Failed to delete task");
+                    set((state) => ({
+                        tasks: state.tasks.filter((t) => t.id !== id),
+                    }));
+                } catch (err: any) {
+                    set({ error: err.message || "Failed to delete task" });
+                } finally {
+                    set({ isLoading: false });
+                }
+            },
+
+            getTaskById: (id) => get().tasks.find((task) => task.id === id),
+
             setSort: (sortBy, sortOrder) => set({ sortBy, sortOrder }),
             resetSort: () =>
                 set({
                     sortBy: "createdAt",
                     sortOrder: "desc",
                 }),
+
             setFilter: (filterType, value) =>
                 set((state) => ({
                     filters: {
@@ -95,24 +154,15 @@ export const useTaskStore = create<TaskState>()(
                         priority: "All",
                     },
                 }),
-            addTask: (task) => {
-                set((state) => ({ tasks: [...state.tasks, task] }));
-            },
-            updateTask: (updatedTask) =>
-                set((state) => ({
-                    tasks: state.tasks.map((task) =>
-                        task.id === updatedTask.id ? updatedTask : task
-                    ),
-                })),
-            deleteTask: (id) =>
-                set((state) => ({
-                    tasks: state.tasks.filter((task) => task.id !== id),
-                })),
-            getTaskById: (id) => get().tasks.find((task) => task.id === id),
         }),
         {
             name: "task-storage",
             storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                filters: state.filters,
+                sortBy: state.sortBy,
+                sortOrder: state.sortOrder,
+            }),
         }
     )
 );
