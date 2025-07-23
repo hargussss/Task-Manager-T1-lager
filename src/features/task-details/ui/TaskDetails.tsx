@@ -14,7 +14,7 @@ const TaskDetails: React.FC<{ taskId?: string }> = ({ taskId: propTaskId }) => {
     const { id } = useParams<{ id: string }>();
     const taskId = propTaskId || id || "new";
 
-    const { addTask, updateTask, getTaskById } = useTaskStore();
+    const { createTask, updateTask, getTaskById } = useTaskStore();
 
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
@@ -79,9 +79,22 @@ const TaskDetails: React.FC<{ taskId?: string }> = ({ taskId: propTaskId }) => {
         };
 
         if (taskId === "new") {
-            addTask(newTask);
+            createTask({
+                title,
+                description,
+                category,
+                status,
+                priority,
+            });
         } else {
-            updateTask(newTask);
+            updateTask(taskId, {
+                title,
+                description,
+                category,
+                status,
+                priority,
+                createdAt,
+            });
         }
 
         setIsSubmitting(false);
